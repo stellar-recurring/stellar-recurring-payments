@@ -1,0 +1,20 @@
+[package]
+name = "subscription-vault"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Non-custodial recurring subscription & auto-billing protocol for Stellar Soroban"
+license = "MIT OR Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+
+[features]
+testutils = ["soroban-sdk/testutils"]

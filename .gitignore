@@ -1,0 +1,12 @@
+/target
+**/node_modules
+**/dist
+**/test_snapshots
+.DS_Store
+*.wasm
+.env
+.env.*
+!.env.example
+.keeper-state.json
+**/.keeper-state.json
+
