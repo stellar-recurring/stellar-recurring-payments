@@ -11,9 +11,31 @@
       "import": "./dist/index.js"
     }
   },
+  "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stellar-recurring/stellar-recurring-payments.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/stellar-recurring/stellar-recurring-payments/tree/main/packages/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/stellar-recurring/stellar-recurring-payments/issues"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "subscription",
+    "recurring-payments",
+    "sdk"
+  ],
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^13.0.0"

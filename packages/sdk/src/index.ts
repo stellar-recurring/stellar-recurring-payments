@@ -12,6 +12,8 @@ export {
 
 export { EVENT_TOPICS, vaultEventTopicFilter } from "./events.js";
 
+export { SdkError, ConfigError } from "./errors.js";
+
 export type { Subscription, SubscriptionClientConfig } from "./client.js";
 export type {
   VaultEventKind,

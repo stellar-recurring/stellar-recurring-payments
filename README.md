@@ -2,7 +2,33 @@
 
 Non-custodial recurring crypto payments on **Stellar Soroban**. Subscribers grant a token allowance; keepers pull bills on interval; cancellation is instant.
 
-Built for [Drips Wave](https://github.com) open-source contributors.
+Built for [Drips Wave](https://www.drips.network/wave/) open-source contributors.
+
+## Why this is not a clone
+
+This repo is **not** a port of Vowena, SorobanPay, or streaming-payment designs. Differentiating choices:
+
+| Choice | Why it matters |
+|--------|----------------|
+| **Permissionless keeper-first** | Anyone can call `process_payment` when due — no privileged merchant cron |
+| **Short-symbol event topics** | Stable `sub` / `created` \| `paid` \| `cancelled` prefixes for cheap RPC filters |
+| **CEI billing** | `last_billed` is updated before `transfer_from` to block reentrancy double-bills |
+| **Dual MIT / Apache-2.0** | Explicit dual licensing for Wave and downstream reuse |
+| **Explicit TTL extension** | Create / bill / cancel bump instance + entry TTL (~30 days) |
+| **Typed TS SDK + keeper** | First-class packages under `packages/sdk` and `packages/keeper`, not afterthought scripts |
+
+## Architecture
+
+Full write-up: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+```mermaid
+flowchart LR
+  Subscriber -->|approve| Token
+  Subscriber -->|create / cancel| Vault
+  Keeper -->|process_payment| Vault
+  Vault -->|transfer_from| Token
+  Token --> Merchant
+```
 
 ## How it works
 
@@ -18,12 +44,13 @@ Built for [Drips Wave](https://github.com) open-source contributors.
 ├── contracts/subscription_vault/   # Soroban Rust contract
 ├── packages/sdk/                   # TypeScript client helpers
 ├── packages/keeper/                # Permissionless billing bot
+├── docs/ARCHITECTURE.md
 └── README.md
 ```
 
 ## Prerequisites
 
-- Rust 1.84+ with target `wasm32v1-none` (required by soroban-sdk 27+)
+- Rust stable (see `rust-toolchain.toml`) with target `wasm32v1-none` (required by soroban-sdk 27+)
 - [Stellar CLI](https://developers.stellar.org/docs/tools/cli) (`stellar`)
 - Node 20+ (for the SDK)
 
@@ -35,7 +62,6 @@ cargo install --locked stellar-cli --features opt
 ## Build & test the contract
 
 ```bash
-cd contracts/subscription_vault   # or from repo root
 cargo test -p subscription-vault
 cargo build --release --target wasm32v1-none -p subscription-vault
 ```
@@ -69,7 +95,7 @@ stellar contract invoke \
 
 ```bash
 cd packages/sdk
-npm install
+npm ci
 npm run build
 ```
 
@@ -98,6 +124,8 @@ const create = client.buildCreateSubscriptionOp({
 });
 ```
 
+See [packages/sdk/README.md](packages/sdk/README.md).
+
 ## Contract API
 
 | Function | Auth | Description |
@@ -125,8 +153,8 @@ SDK helpers: `EVENT_TOPICS` / `vaultEventTopicFilter` from `@recurring-subscript
 Permissionless relayer that indexes vault events and submits `process_payment` when due.
 
 ```bash
-cd packages/sdk && npm install && npm run build
-cd ../keeper && npm install
+cd packages/sdk && npm ci && npm run build
+cd ../keeper && npm ci
 cp .env.example .env   # fill CONTRACT_ID + KEEPER_SECRET_KEY
 npm run build
 
@@ -155,21 +183,17 @@ Flow each poll: sync `sub/created` & `sub/cancelled` → merge bootstrap/scan �
 - **CEI** — `last_billed` is written **before** `transfer_from` to prevent reentrancy double-bills.
 - **Auth** — Create / cancel require `subscriber.require_auth()`.
 
-## Drips Wave contributor guide
+## Status / roadmap
 
-1. Fork & clone; create a feature branch (`feat/...` or `fix/...`).
-2. Keep changes scoped — contract logic, SDK, or docs — ideally one concern per PR.
-3. Run `cargo test` before opening a PR; add a failing-case test for any bugfix.
-4. Prefer explicit `Error` variants over panics; document new TTL / auth invariants inline.
-5. Do not commit secrets, `.env`, or funded keypairs.
-6. Open a PR with: **what** changed, **why**, and a short test plan.
+Early Wave-ready scaffolding: vault + SDK + keeper. Track work and pick up tasks via [open issues](https://github.com/stellar-recurring/stellar-recurring-payments/issues) (labels: `good-first-issue`, `contract`, `sdk`, `keeper`, `docs`).
 
-### Good first issues
+## Contributing
 
-- Merchant-facing `list_subscriptions` / index by merchant
-- Frontend approve + create flow
-- Keeper metrics / Prometheus export
+See [CONTRIBUTING.md](CONTRIBUTING.md) for fork flow, conventional commits, CI expectations, and Wave guidance.
 
-## License
+## Community & policy
 
-MIT OR Apache-2.0
+- [LICENSE](LICENSE) — dual MIT OR Apache-2.0 ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE))
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md) — private vulnerability reporting
