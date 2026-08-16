@@ -13,6 +13,8 @@ cp .env.example .env   # set CONTRACT_ID + KEEPER_SECRET_KEY (fund with XLM)
 npm run build
 DRY_RUN=true npm start -- --once   # one pass, no submits
 DRY_RUN=false npm start            # continuous billing loop
+npm start -- --help                # usage
+npm start -- --version             # package version
 ```
 
 ## Dev (tsx, no build)

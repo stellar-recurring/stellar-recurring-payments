@@ -8,8 +8,16 @@
  * 3. For each ID: simulate get_subscription → if due → process_payment
  *
  * Configure via env (see `.env.example`). Default DRY_RUN=true.
+ *
+ * Flags:
+ *   --once       Run a single billing pass and exit
+ *   --help, -h   Print usage
+ *   --version, -v Print package version
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { rpc } from "@stellar/stellar-sdk";
 
 import { loadConfig } from "./config.js";
@@ -23,6 +31,32 @@ import {
   saveState,
   type KeeperState,
 } from "./state.js";
+
+const USAGE = `Usage:
+  subscription-keeper [--once]
+  subscription-keeper --help
+  subscription-keeper --version
+
+Env (see .env.example):
+  RPC_URL, CONTRACT_ID, KEEPER_SECRET_KEY are required.
+  DRY_RUN defaults to true.`;
+
+function packageVersion(): string {
+  const packagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+  return (JSON.parse(readFileSync(packagePath, "utf8")) as { version: string }).version;
+}
+
+function handleCliFlags(argv: readonly string[]): boolean {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    process.stdout.write(`${USAGE}\n`);
+    return true;
+  }
+  if (argv.includes("--version") || argv.includes("-v")) {
+    process.stdout.write(`${packageVersion()}\n`);
+    return true;
+  }
+  return false;
+}
 
 async function discoverMissingIds(
   executor: PaymentExecutor,
@@ -95,6 +129,9 @@ async function runOnce(
 }
 
 async function main(): Promise<void> {
+  const argv = process.argv.slice(2);
+  if (handleCliFlags(argv)) return;
+
   const config = loadConfig();
   const server = new rpc.Server(config.rpcUrl, { allowHttp: true });
   const executor = new PaymentExecutor(server, config);
@@ -111,7 +148,7 @@ async function main(): Promise<void> {
     (await loadState(config.stateFile)) ??
     emptyState(config.startLedger ?? 0);
 
-  const once = process.argv.includes("--once");
+  const once = argv.includes("--once");
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

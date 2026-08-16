@@ -161,6 +161,10 @@ npm run build
 # Single pass (recommended first)
 DRY_RUN=true npm start -- --once
 
+# Inspect CLI
+npm start -- --help
+npm start -- --version
+
 # Continuous loop
 DRY_RUN=false npm start
 ```
