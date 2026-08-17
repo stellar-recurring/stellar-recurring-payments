@@ -7,8 +7,15 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
   error: 40,
 };
 
-const minLevel: LogLevel =
-  (process.env.LOG_LEVEL?.trim().toLowerCase() as LogLevel) || "info";
+function resolveMinLevel(): LogLevel {
+  const raw = process.env.LOG_LEVEL?.trim().toLowerCase();
+  if (raw === "debug" || raw === "info" || raw === "warn" || raw === "error") {
+    return raw;
+  }
+  return "info";
+}
+
+const minLevel: LogLevel = resolveMinLevel();
 
 function shouldLog(level: LogLevel): boolean {
   return LEVEL_ORDER[level] >= LEVEL_ORDER[minLevel];
