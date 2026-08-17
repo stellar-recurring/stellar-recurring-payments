@@ -67,6 +67,7 @@ cd packages/sdk
 npm ci
 npm run build
 npm run typecheck
+npm test
 ```
 
 ### Keeper (depends on a built SDK)

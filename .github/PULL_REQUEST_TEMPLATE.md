@@ -11,7 +11,7 @@ Fixes #
 ## Test plan
 
 - [ ] `cargo test -p subscription-vault` (if contract touched)
-- [ ] `cd packages/sdk && npm ci && npm run build` (if SDK/keeper touched)
+- [ ] `cd packages/sdk && npm ci && npm test` (if SDK/keeper touched)
 - [ ] `cd packages/keeper && npm ci && npm run typecheck` (if keeper touched)
 - [ ] Manual / other checks:
 
