@@ -3,7 +3,7 @@ resolver = "2"
 members = ["contracts/subscription_vault"]
 
 [workspace.dependencies]
-soroban-sdk = "=27.0.0"
+soroban-sdk = "=27.0.6"
 
 # Host allows ed25519-dalek >=2; cargo would pick 3.x which breaks rand_chacha 0.3.
 # Keep this pin when regenerating the lockfile (`cargo update -p ed25519-dalek --precise 2.2.0`).
