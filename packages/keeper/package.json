@@ -16,7 +16,7 @@
   "dependencies": {
     "@recurring-subscriptions/sdk": "file:../sdk",
     "@stellar/stellar-sdk": "^13.0.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
