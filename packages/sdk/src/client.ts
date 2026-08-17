@@ -9,6 +9,8 @@ import {
   type Networks,
 } from "@stellar/stellar-sdk";
 
+import { ConfigError } from "./errors.js";
+
 /** On-chain subscription record (mirrors Rust `Subscription`). */
 export interface Subscription {
   subscriber: string;
@@ -63,6 +65,15 @@ export class SubscriptionClient {
   readonly fee: number;
 
   constructor(config: SubscriptionClientConfig) {
+    if (!config.contractId.trim()) {
+      throw new ConfigError("contractId is required");
+    }
+    if (!config.networkPassphrase.trim()) {
+      throw new ConfigError("networkPassphrase is required");
+    }
+    if (!config.source.trim()) {
+      throw new ConfigError("source is required");
+    }
     this.contractId = config.contractId;
     this.contract = new Contract(config.contractId);
     this.networkPassphrase = config.networkPassphrase;
