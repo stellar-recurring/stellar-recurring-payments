@@ -31,3 +31,5 @@ npm run dev -- --once
 4. Persist `.keeper-state.json`
 
 `DRY_RUN=true` (default) logs due bills without submitting.
+
+`LOG_LEVEL` accepts `debug`, `info`, `warn`, or `error`. Anything else is treated as `info`.
