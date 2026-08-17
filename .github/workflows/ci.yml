@@ -30,6 +30,7 @@ jobs:
           cache-dependency-path: packages/sdk/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm test
 
   keeper-typecheck:
     runs-on: ubuntu-latest
