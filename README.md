@@ -178,6 +178,7 @@ DRY_RUN=false npm start
 | `SUBSCRIPTION_IDS` | Optional bootstrap IDs |
 | `MAX_ID_SCAN` | Scan `1..N` when event index is empty |
 | `STATE_FILE` | Persisted active IDs + event cursor |
+| `LOG_LEVEL` | Keeper log verbosity (`debug` / `info` / `warn` / `error`) |
 
 Flow each poll: sync `sub/created` & `sub/cancelled` → merge bootstrap/scan → `get_subscription` simulate → if due → `prepareTransaction` + sign + `sendTransaction`.
 
@@ -198,6 +199,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for fork flow, conventional commits, CI e
 ## Community & policy
 
 - [LICENSE](LICENSE) — dual MIT OR Apache-2.0 ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE))
+- [CHANGELOG.md](CHANGELOG.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md) — private vulnerability reporting
