@@ -45,7 +45,7 @@ const create = client.buildCreateSubscriptionOp({
 });
 
 // Filter RPC getEvents for vault topics (e.g. sub / created)
-const filter = vaultEventTopicFilter(EVENT_TOPICS.created);
+const filter = vaultEventTopicFilter(EVENT_TOPICS.CREATED);
 ```
 
 ## Scripts
@@ -54,7 +54,7 @@ const filter = vaultEventTopicFilter(EVENT_TOPICS.created);
 |--------|-------------|
 | `npm run build` | Compile to `dist/` |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Unit tests (minimal / placeholder) |
+| `npm test` | Build, then run `node --test` (errors + due helpers) |
 
 ## License
 
