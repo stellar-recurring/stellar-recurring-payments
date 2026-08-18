@@ -41,6 +41,8 @@ Env (see .env.example):
   RPC_URL, CONTRACT_ID, KEEPER_SECRET_KEY are required.
   DRY_RUN defaults to true.`;
 
+const KNOWN_FLAGS = new Set(["--once", "--help", "-h", "--version", "-v"]);
+
 function packageVersion(): string {
   const packagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
   return (JSON.parse(readFileSync(packagePath, "utf8")) as { version: string }).version;
@@ -54,6 +56,11 @@ function handleCliFlags(argv: readonly string[]): boolean {
   if (argv.includes("--version") || argv.includes("-v")) {
     process.stdout.write(`${packageVersion()}\n`);
     return true;
+  }
+  for (const arg of argv) {
+    if (!KNOWN_FLAGS.has(arg)) {
+      throw new Error(`Unknown flag: ${arg}\n${USAGE}`);
+    }
   }
   return false;
 }
