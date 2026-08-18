@@ -22,6 +22,14 @@ export interface Subscription {
   isActive: boolean;
 }
 
+function unixSeconds(nowSecs: number | bigint): bigint {
+  if (typeof nowSecs === "bigint") return nowSecs;
+  if (!Number.isInteger(nowSecs)) {
+    throw new RangeError("nowSecs must be a finite integer timestamp");
+  }
+  return BigInt(nowSecs);
+}
+
 /**
  * Whether a subscription is billable at `now` (unix seconds).
  * Mirrors on-chain rules: inactive → false; `lastBilled == 0` → due now;
@@ -29,7 +37,7 @@ export interface Subscription {
  */
 export function isSubscriptionDue(sub: Subscription, nowSecs: number | bigint): boolean {
   if (!sub.isActive) return false;
-  const now = BigInt(nowSecs);
+  const now = unixSeconds(nowSecs);
   if (sub.lastBilled === 0n) return true;
   return now >= sub.lastBilled + sub.intervalSecs;
 }
@@ -37,7 +45,7 @@ export function isSubscriptionDue(sub: Subscription, nowSecs: number | bigint): 
 /** Seconds until the next bill is allowed (0 if already due / inactive). */
 export function secondsUntilDue(sub: Subscription, nowSecs: number | bigint): bigint {
   if (!sub.isActive || sub.lastBilled === 0n) return 0n;
-  const now = BigInt(nowSecs);
+  const now = unixSeconds(nowSecs);
   const next = sub.lastBilled + sub.intervalSecs;
   return next > now ? next - now : 0n;
 }

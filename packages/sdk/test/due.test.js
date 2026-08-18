@@ -54,4 +54,9 @@ describe("secondsUntilDue", () => {
     assert.equal(secondsUntilDue(sub(), 4_600), 0n);
     assert.equal(secondsUntilDue(sub(), 9_999), 0n);
   });
+
+  it("rejects non-integer timestamps", () => {
+    assert.throws(() => isSubscriptionDue(sub(), Number.NaN), RangeError);
+    assert.throws(() => secondsUntilDue(sub(), 1.5), RangeError);
+  });
 });
