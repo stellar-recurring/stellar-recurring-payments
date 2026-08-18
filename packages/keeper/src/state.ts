@@ -27,6 +27,13 @@ export async function loadState(path: string): Promise<KeeperState | null> {
     if (!Array.isArray(parsed.activeIds)) {
       throw new Error("activeIds missing");
     }
+    if (
+      typeof parsed.cursorLedger !== "number" ||
+      !Number.isInteger(parsed.cursorLedger) ||
+      parsed.cursorLedger < 0
+    ) {
+      throw new Error("cursorLedger invalid");
+    }
     return parsed;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -43,9 +50,10 @@ export async function saveState(path: string, state: KeeperState): Promise<void>
   const next: KeeperState = {
     ...state,
     // Stable sort for readable diffs
-    activeIds: [...new Set(state.activeIds)].sort(
-      (a, b) => Number(BigInt(a) - BigInt(b)),
-    ),
+    activeIds: [...new Set(state.activeIds)].sort((a, b) => {
+      const delta = BigInt(a) - BigInt(b);
+      return delta < 0n ? -1 : delta > 0n ? 1 : 0;
+    }),
     updatedAt: new Date().toISOString(),
   };
   await mkdir(dirname(path), { recursive: true });
