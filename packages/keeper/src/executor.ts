@@ -20,16 +20,43 @@ export interface BillAttempt {
   hash?: string;
 }
 
+function requireField(value: unknown, field: string): unknown {
+  if (value === undefined || value === null || value === "") {
+    throw new TypeError(`subscription.${field} missing`);
+  }
+  return value;
+}
+
 function mapSubscription(raw: unknown): Subscription {
+  if (raw === null || typeof raw !== "object") {
+    throw new TypeError("subscription decode is not an object");
+  }
   const o = raw as Record<string, unknown>;
+  const subscriber = String(requireField(o.subscriber, "subscriber"));
+  const merchant = String(requireField(o.merchant, "merchant"));
+  const token = String(requireField(o.token, "token"));
+  if (!subscriber.trim() || !merchant.trim() || !token.trim()) {
+    throw new TypeError("subscription addresses must not be blank");
+  }
+  const isActive = o.is_active ?? o.isActive;
+  if (typeof isActive !== "boolean") {
+    throw new TypeError("subscription.is_active missing");
+  }
   return {
-    subscriber: String(o.subscriber),
-    merchant: String(o.merchant),
-    token: String(o.token),
-    amount: BigInt(o.amount as string | number | bigint),
-    intervalSecs: BigInt(o.interval_secs as string | number | bigint),
-    lastBilled: BigInt(o.last_billed as string | number | bigint),
-    isActive: Boolean(o.is_active),
+    subscriber,
+    merchant,
+    token,
+    amount: BigInt(requireField(o.amount, "amount") as string | number | bigint),
+    intervalSecs: BigInt(
+      requireField(o.interval_secs ?? o.intervalSecs, "interval_secs") as
+        | string
+        | number
+        | bigint,
+    ),
+    lastBilled: BigInt(
+      requireField(o.last_billed ?? o.lastBilled, "last_billed") as string | number | bigint,
+    ),
+    isActive,
   };
 }
 
