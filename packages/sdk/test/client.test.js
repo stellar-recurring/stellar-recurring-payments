@@ -26,4 +26,35 @@ describe("SubscriptionClient", () => {
     );
     assert.throws(() => new SubscriptionClient({ ...base, source: "" }), ConfigError);
   });
+
+  it("trims identifiers and rejects invalid fees", () => {
+    const client = new SubscriptionClient({
+      contractId: "  CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4  ",
+      networkPassphrase: `  ${NETWORKS.TESTNET}  `,
+      source: "  GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF  ",
+    });
+    assert.equal(client.contractId, "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4");
+    assert.equal(client.networkPassphrase, NETWORKS.TESTNET);
+    assert.equal(client.source, "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
+    assert.throws(
+      () =>
+        new SubscriptionClient({
+          contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+          networkPassphrase: NETWORKS.TESTNET,
+          source: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+          fee: -1,
+        }),
+      ConfigError,
+    );
+    assert.throws(
+      () =>
+        new SubscriptionClient({
+          contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+          networkPassphrase: NETWORKS.TESTNET,
+          source: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+          fee: 1.5,
+        }),
+      ConfigError,
+    );
+  });
 });

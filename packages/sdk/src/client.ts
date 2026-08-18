@@ -65,20 +65,27 @@ export class SubscriptionClient {
   readonly fee: number;
 
   constructor(config: SubscriptionClientConfig) {
-    if (!config.contractId.trim()) {
+    const contractId = config.contractId.trim();
+    const networkPassphrase = config.networkPassphrase.trim();
+    const source = config.source.trim();
+    if (!contractId) {
       throw new ConfigError("contractId is required");
     }
-    if (!config.networkPassphrase.trim()) {
+    if (!networkPassphrase) {
       throw new ConfigError("networkPassphrase is required");
     }
-    if (!config.source.trim()) {
+    if (!source) {
       throw new ConfigError("source is required");
     }
-    this.contractId = config.contractId;
-    this.contract = new Contract(config.contractId);
-    this.networkPassphrase = config.networkPassphrase;
-    this.source = config.source;
-    this.fee = config.fee ?? 100;
+    const fee = config.fee ?? 100;
+    if (!Number.isInteger(fee) || fee < 0) {
+      throw new ConfigError("fee must be a non-negative integer (stroops)");
+    }
+    this.contractId = contractId;
+    this.contract = new Contract(contractId);
+    this.networkPassphrase = networkPassphrase;
+    this.source = source;
+    this.fee = fee;
   }
 
   /** Assemble an SAC `approve` so the vault can `transfer_from` later. */
