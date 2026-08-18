@@ -27,17 +27,19 @@ function required(name: string): string {
 function bool(name: string, fallback: boolean): boolean {
   const raw = process.env[name]?.trim().toLowerCase();
   if (raw === undefined || raw === "") return fallback;
-  return raw === "1" || raw === "true" || raw === "yes";
+  if (raw === "1" || raw === "true" || raw === "yes") return true;
+  if (raw === "0" || raw === "false" || raw === "no") return false;
+  throw new Error(`Invalid ${name}: ${raw} (expected true/false)`);
 }
 
-function int(name: string, fallback: number): number {
+function int(name: string, fallback: number, min = 0): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
   const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) {
+  if (!Number.isInteger(n) || n < min) {
     throw new Error(`Invalid ${name}: ${raw}`);
   }
-  return Math.floor(n);
+  return n;
 }
 
 function parseIds(raw: string | undefined): bigint[] {
@@ -48,7 +50,9 @@ function parseIds(raw: string | undefined): bigint[] {
     .filter(Boolean)
     .map((s) => {
       try {
-        return BigInt(s);
+        const id = BigInt(s);
+        if (id <= 0n) throw new Error("non-positive");
+        return id;
       } catch {
         throw new Error(`Invalid SUBSCRIPTION_IDS entry: ${s}`);
       }
@@ -57,13 +61,14 @@ function parseIds(raw: string | undefined): bigint[] {
 
 export function loadConfig(): KeeperConfig {
   const startRaw = process.env.START_LEDGER?.trim();
+  const pollIntervalMs = int("POLL_INTERVAL_MS", 30_000, 1);
   return {
     rpcUrl: required("RPC_URL"),
     networkPassphrase:
       process.env.NETWORK_PASSPHRASE?.trim() || NETWORKS.TESTNET,
     contractId: required("CONTRACT_ID"),
     keeperSecretKey: required("KEEPER_SECRET_KEY"),
-    pollIntervalMs: int("POLL_INTERVAL_MS", 30_000),
+    pollIntervalMs,
     dryRun: bool("DRY_RUN", true),
     stateFile: process.env.STATE_FILE?.trim() || "./.keeper-state.json",
     startLedger: startRaw ? int("START_LEDGER", 0) : null,
