@@ -37,5 +37,12 @@ export interface PaymentProcessedData {
 export function vaultEventTopicFilter(
   kind: VaultEventKind,
 ): [string, string, "*", "*", "*"] {
+  if (
+    kind !== EVENT_TOPICS.CREATED &&
+    kind !== EVENT_TOPICS.PAID &&
+    kind !== EVENT_TOPICS.CANCELLED
+  ) {
+    throw new RangeError(`Unknown vault event kind: ${String(kind)}`);
+  }
   return [EVENT_TOPICS.PREFIX, kind, "*", "*", "*"];
 }
