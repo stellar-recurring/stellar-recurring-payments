@@ -57,4 +57,47 @@ describe("SubscriptionClient", () => {
       ConfigError,
     );
   });
+
+  it("rejects invalid create, approve, and bill inputs", () => {
+    const client = new SubscriptionClient({
+      contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+      networkPassphrase: NETWORKS.TESTNET,
+      source: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+    });
+    const parties = {
+      subscriber: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      merchant: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      token: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+    };
+    assert.throws(
+      () =>
+        client.buildCreateSubscriptionOp({
+          ...parties,
+          merchant: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB4",
+          amount: 0n,
+          intervalSecs: 3_600n,
+        }),
+      RangeError,
+    );
+    assert.throws(
+      () =>
+        client.buildCreateSubscriptionOp({
+          ...parties,
+          amount: 1n,
+          intervalSecs: 3_600n,
+        }),
+      RangeError,
+    );
+    assert.throws(() => client.buildProcessPaymentOp(-1n), RangeError);
+    assert.throws(
+      () =>
+        client.buildApproveOp({
+          tokenContractId: parties.token,
+          subscriber: parties.subscriber,
+          amount: 1n,
+          expirationLedger: -1,
+        }),
+      RangeError,
+    );
+  });
 });

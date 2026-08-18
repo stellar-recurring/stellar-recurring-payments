@@ -1,6 +1,8 @@
 export {
   SubscriptionClient,
   NETWORKS,
+  MIN_INTERVAL_SECS,
+  MAX_INTERVAL_SECS,
   isSubscriptionDue,
   secondsUntilDue,
   Address,

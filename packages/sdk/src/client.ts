@@ -11,6 +11,11 @@ import {
 
 import { ConfigError } from "./errors.js";
 
+/** Mirrors on-chain `MIN_INTERVAL_SECS` (1 hour). */
+export const MIN_INTERVAL_SECS = 3_600n;
+/** Mirrors on-chain `MAX_INTERVAL_SECS` (~1 year). */
+export const MAX_INTERVAL_SECS = 31_536_000n;
+
 /** On-chain subscription record (mirrors Rust `Subscription`). */
 export interface Subscription {
   subscriber: string;
@@ -96,6 +101,13 @@ export class SubscriptionClient {
     this.fee = fee;
   }
 
+  private requireSubscriptionId(id: bigint, label = "subscriptionId"): bigint {
+    if (id < 0n) {
+      throw new RangeError(`${label} must be a non-negative u64`);
+    }
+    return id;
+  }
+
   /** Assemble an SAC `approve` so the vault can `transfer_from` later. */
   buildApproveOp(params: {
     tokenContractId: string;
@@ -104,6 +116,12 @@ export class SubscriptionClient {
     /** Ledger sequence after which the allowance expires. */
     expirationLedger: number;
   }): xdr.Operation {
+    if (params.amount <= 0n) {
+      throw new RangeError("approve amount must be positive");
+    }
+    if (!Number.isInteger(params.expirationLedger) || params.expirationLedger < 0) {
+      throw new RangeError("expirationLedger must be a non-negative integer");
+    }
     const token = new Contract(params.tokenContractId);
     return token.call(
       "approve",
@@ -122,6 +140,15 @@ export class SubscriptionClient {
     amount: bigint;
     intervalSecs: bigint;
   }): xdr.Operation {
+    if (params.amount <= 0n) {
+      throw new RangeError("amount must be positive");
+    }
+    if (params.intervalSecs < MIN_INTERVAL_SECS || params.intervalSecs > MAX_INTERVAL_SECS) {
+      throw new RangeError("intervalSecs is outside the on-chain allowed range");
+    }
+    if (params.subscriber === params.merchant) {
+      throw new RangeError("subscriber and merchant must be distinct");
+    }
     return this.contract.call(
       "create_subscription",
       Address.fromString(params.subscriber).toScVal(),
@@ -136,7 +163,7 @@ export class SubscriptionClient {
   buildProcessPaymentOp(subscriptionId: bigint): xdr.Operation {
     return this.contract.call(
       "process_payment",
-      nativeToScVal(subscriptionId, { type: "u64" }),
+      nativeToScVal(this.requireSubscriptionId(subscriptionId), { type: "u64" }),
     );
   }
 
@@ -144,7 +171,7 @@ export class SubscriptionClient {
   buildGetSubscriptionOp(subscriptionId: bigint): xdr.Operation {
     return this.contract.call(
       "get_subscription",
-      nativeToScVal(subscriptionId, { type: "u64" }),
+      nativeToScVal(this.requireSubscriptionId(subscriptionId), { type: "u64" }),
     );
   }
 
@@ -156,7 +183,7 @@ export class SubscriptionClient {
     return this.contract.call(
       "cancel_subscription",
       Address.fromString(params.subscriber).toScVal(),
-      nativeToScVal(params.subscriptionId, { type: "u64" }),
+      nativeToScVal(this.requireSubscriptionId(params.subscriptionId), { type: "u64" }),
     );
   }
 
