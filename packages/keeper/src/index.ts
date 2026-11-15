@@ -16,10 +16,11 @@
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { rpc } from "@stellar/stellar-sdk";
 
+import { ExponentialBackoff, isFatalRpcError } from "./backoff.js";
 import { loadConfig } from "./config.js";
 import { networkNowSecs, PaymentExecutor } from "./executor.js";
 import { syncEvents } from "./indexer.js";
@@ -97,7 +98,7 @@ async function runOnce(
 
   await discoverMissingIds(executor, state, config.maxIdScan);
 
-  const now = await networkNowSecs(server);
+  const now = await networkNowSecs(server, config);
   const ids = state.activeIds.map((s) => BigInt(s));
 
   log.info("billing pass", {
@@ -115,6 +116,9 @@ async function runOnce(
         state.activeIds = state.activeIds.filter((x) => x !== id.toString());
       }
     } catch (err) {
+      if (isFatalRpcError(err)) {
+        throw err;
+      }
       log.error("bill attempt threw", { id: id.toString(), err: String(err) });
       results.push({
         id,
@@ -142,6 +146,11 @@ async function main(): Promise<void> {
   const config = loadConfig();
   const server = new rpc.Server(config.rpcUrl, { allowHttp: true });
   const executor = new PaymentExecutor(server, config);
+  const pollBackoff = new ExponentialBackoff({
+    initialDelayMs: config.rpcBackoffInitialMs,
+    maxDelayMs: Math.max(config.pollIntervalMs, config.rpcBackoffMaxMs),
+    jitterRatio: config.rpcBackoffJitterRatio,
+  });
 
   log.info("keeper starting", {
     contractId: config.contractId,
@@ -149,6 +158,10 @@ async function main(): Promise<void> {
     rpcUrl: config.rpcUrl,
     dryRun: config.dryRun,
     pollIntervalMs: config.pollIntervalMs,
+    rpcBackoffInitialMs: config.rpcBackoffInitialMs,
+    rpcBackoffMaxMs: config.rpcBackoffMaxMs,
+    rpcBackoffJitterRatio: config.rpcBackoffJitterRatio,
+    rpcMaxRetries: config.rpcMaxRetries,
   });
 
   let state =
@@ -159,10 +172,22 @@ async function main(): Promise<void> {
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    let waitMs = config.pollIntervalMs;
     try {
       await runOnce(server, executor, state, config);
+      pollBackoff.reset();
     } catch (err) {
-      log.error("poll iteration failed", { err: String(err) });
+      if (isFatalRpcError(err) || once) {
+        log.error("unrecoverable keeper failure; stopping", { err: String(err) });
+        throw err;
+      }
+      const backoffDelayMs = pollBackoff.nextDelayMs();
+      waitMs = Math.max(config.pollIntervalMs, backoffDelayMs);
+      log.warn("poll iteration failed; backing off before next cycle", {
+        consecutiveOutages: pollBackoff.attempts,
+        waitMs,
+        err: String(err),
+      });
     }
 
     if (once) {
@@ -170,13 +195,19 @@ async function main(): Promise<void> {
       break;
     }
 
-    await new Promise((r) => setTimeout(r, config.pollIntervalMs));
+    await new Promise((r) => setTimeout(r, waitMs));
     // Reload state from disk in case an operator edited activeIds.
     state = (await loadState(config.stateFile)) ?? state;
   }
 }
 
-main().catch((err) => {
-  log.error("fatal", { err: String(err) });
-  process.exit(1);
-});
+const isDirectEntry =
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (isDirectEntry) {
+  main().catch((err) => {
+    log.error("fatal", { err: String(err) });
+    process.exit(1);
+  });
+}

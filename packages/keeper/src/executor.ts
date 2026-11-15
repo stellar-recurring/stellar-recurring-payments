@@ -10,6 +10,14 @@ import {
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 
+import {
+  ExponentialBackoff,
+  FatalKeeperError,
+  isFatalRpcError,
+  withRpcBackoff,
+  type RpcRetryOptions,
+  type RpcRuntimeOptions,
+} from "./backoff.js";
 import type { KeeperConfig } from "./config.js";
 import { log } from "./logger.js";
 
@@ -60,34 +68,72 @@ function mapSubscription(raw: unknown): Subscription {
   };
 }
 
-function sleep(ms: number): Promise<void> {
+function defaultSleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
 export class PaymentExecutor {
   private readonly client: SubscriptionClient;
   private readonly keypair: Keypair;
+  private readonly backoff: ExponentialBackoff;
+  private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly randomFn: (() => number) | undefined;
 
   constructor(
     private readonly server: rpc.Server,
     private readonly config: KeeperConfig,
+    runtime: RpcRuntimeOptions = {},
   ) {
-    this.keypair = Keypair.fromSecret(config.keeperSecretKey);
-    this.client = new SubscriptionClient({
-      contractId: config.contractId,
-      networkPassphrase: config.networkPassphrase,
-      source: this.keypair.publicKey(),
-      fee: config.fee,
-    });
+    try {
+      this.keypair = Keypair.fromSecret(config.keeperSecretKey);
+      this.client = new SubscriptionClient({
+        contractId: config.contractId,
+        networkPassphrase: config.networkPassphrase,
+        source: this.keypair.publicKey(),
+        fee: config.fee,
+      });
+    } catch (err) {
+      throw new FatalKeeperError(
+        `Invalid keeper credentials or contract config: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
+
+    this.sleepFn = runtime.sleep ?? defaultSleep;
+    this.randomFn = runtime.random;
+    this.backoff = new ExponentialBackoff(
+      {
+        initialDelayMs: config.rpcBackoffInitialMs,
+        maxDelayMs: config.rpcBackoffMaxMs,
+        jitterRatio: config.rpcBackoffJitterRatio,
+      },
+      runtime.random,
+    );
   }
 
   get publicKey(): string {
     return this.keypair.publicKey();
   }
 
-  /** Simulate `get_subscription`; returns null if missing / error. */
+  private retryOptions(): RpcRetryOptions {
+    return {
+      initialDelayMs: this.config.rpcBackoffInitialMs,
+      maxDelayMs: this.config.rpcBackoffMaxMs,
+      jitterRatio: this.config.rpcBackoffJitterRatio,
+      maxRetries: this.config.rpcMaxRetries,
+      sleep: this.sleepFn,
+      random: this.randomFn,
+      backoff: this.backoff,
+    };
+  }
+
+  /** Simulate `get_subscription`; returns null if missing / contract error, throws on fatal/exhausted RPC failures. */
   async fetchSubscription(id: bigint): Promise<Subscription | null> {
-    const account = await this.server.getAccount(this.keypair.publicKey());
+    const account = await withRpcBackoff(
+      "executor.getAccount",
+      () => this.server.getAccount(this.keypair.publicKey()),
+      this.retryOptions(),
+    );
     const tx = new TransactionBuilder(account, {
       fee: String(this.config.fee),
       networkPassphrase: this.config.networkPassphrase,
@@ -96,7 +142,11 @@ export class PaymentExecutor {
       .setTimeout(30)
       .build();
 
-    const sim = await this.server.simulateTransaction(tx);
+    const sim = await withRpcBackoff(
+      "executor.simulateTransaction",
+      () => this.server.simulateTransaction(tx),
+      this.retryOptions(),
+    );
     if (rpc.Api.isSimulationError(sim) || !rpc.Api.isSimulationSuccess(sim)) {
       log.debug("get_subscription failed", {
         id: id.toString(),
@@ -153,7 +203,11 @@ export class PaymentExecutor {
   }
 
   private async submitProcessPayment(id: bigint): Promise<BillAttempt> {
-    const account = await this.server.getAccount(this.keypair.publicKey());
+    const account = await withRpcBackoff(
+      "executor.getAccount",
+      () => this.server.getAccount(this.keypair.publicKey()),
+      this.retryOptions(),
+    );
     let tx = new TransactionBuilder(account, {
       fee: String(this.config.fee),
       networkPassphrase: this.config.networkPassphrase,
@@ -163,10 +217,18 @@ export class PaymentExecutor {
       .build();
 
     // Attach footprint / resource fees from simulation.
-    tx = await this.server.prepareTransaction(tx);
+    tx = await withRpcBackoff(
+      "executor.prepareTransaction",
+      () => this.server.prepareTransaction(tx),
+      this.retryOptions(),
+    );
     tx.sign(this.keypair);
 
-    const sent = await this.server.sendTransaction(tx);
+    const sent = await withRpcBackoff(
+      "executor.sendTransaction",
+      () => this.server.sendTransaction(tx),
+      this.retryOptions(),
+    );
     if (sent.status === "ERROR") {
       return {
         id,
@@ -192,25 +254,57 @@ export class PaymentExecutor {
 
   private async pollStatus(hash: string): Promise<string> {
     for (let i = 0; i < 30; i++) {
-      const res = await this.server.getTransaction(hash);
+      const res = await withRpcBackoff(
+        "executor.getTransaction",
+        () => this.server.getTransaction(hash),
+        this.retryOptions(),
+      );
       if (res.status === rpc.Api.GetTransactionStatus.SUCCESS) {
         return "SUCCESS";
       }
       if (res.status === rpc.Api.GetTransactionStatus.FAILED) {
         return "FAILED";
       }
-      await sleep(1_000);
+      await this.sleepFn(1_000);
     }
     return "TIMEOUT";
   }
 }
 
 /** Wall-clock unix seconds used for due checks (aligned with ledger time on mainnet). */
-export async function networkNowSecs(server: rpc.Server): Promise<number> {
+export async function networkNowSecs(
+  server: rpc.Server,
+  config?: Pick<
+    KeeperConfig,
+    | "rpcBackoffInitialMs"
+    | "rpcBackoffMaxMs"
+    | "rpcBackoffJitterRatio"
+    | "rpcMaxRetries"
+  >,
+  runtime: RpcRuntimeOptions = {},
+): Promise<number> {
   try {
-    await server.getLatestLedger();
-  } catch {
-    // fall through to wall clock
+    if (config) {
+      await withRpcBackoff(
+        "executor.getLatestLedger",
+        () => server.getLatestLedger(),
+        {
+          initialDelayMs: config.rpcBackoffInitialMs,
+          maxDelayMs: config.rpcBackoffMaxMs,
+          jitterRatio: config.rpcBackoffJitterRatio,
+          maxRetries: config.rpcMaxRetries,
+          sleep: runtime.sleep,
+          random: runtime.random,
+        },
+      );
+    } else {
+      await server.getLatestLedger();
+    }
+  } catch (err) {
+    if (isFatalRpcError(err)) {
+      throw err;
+    }
+    // fall through to wall clock on transient RPC timeout
   }
   return Math.floor(Date.now() / 1000);
 }
