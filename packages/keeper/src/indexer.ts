@@ -5,6 +5,11 @@ import {
 } from "@recurring-subscriptions/sdk";
 import { nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 
+import {
+  ExponentialBackoff,
+  withRpcBackoff,
+  type RpcRuntimeOptions,
+} from "./backoff.js";
 import type { KeeperConfig } from "./config.js";
 import { log } from "./logger.js";
 import {
@@ -55,13 +60,38 @@ function topicKind(topics: xdr.ScVal[]): VaultEventKind | null {
 /**
  * Pull vault lifecycle events since `state.cursorLedger` and update active IDs.
  * Advances the cursor past the highest ledger seen.
+ * Transient Soroban RPC errors are retried with capped exponential backoff + jitter.
  */
 export async function syncEvents(
   server: rpc.Server,
   config: KeeperConfig,
   state: KeeperState,
+  runtime: RpcRuntimeOptions = {},
 ): Promise<void> {
-  const latest = await server.getLatestLedger();
+  const sharedBackoff = new ExponentialBackoff(
+    {
+      initialDelayMs: config.rpcBackoffInitialMs,
+      maxDelayMs: config.rpcBackoffMaxMs,
+      jitterRatio: config.rpcBackoffJitterRatio,
+    },
+    runtime.random,
+  );
+
+  const retryOpts = {
+    initialDelayMs: config.rpcBackoffInitialMs,
+    maxDelayMs: config.rpcBackoffMaxMs,
+    jitterRatio: config.rpcBackoffJitterRatio,
+    maxRetries: config.rpcMaxRetries,
+    sleep: runtime.sleep,
+    random: runtime.random,
+    backoff: sharedBackoff,
+  };
+
+  const latest = await withRpcBackoff(
+    "indexer.getLatestLedger",
+    () => server.getLatestLedger(),
+    retryOpts,
+  );
   let startLedger = state.cursorLedger;
 
   if (startLedger <= 0) {
@@ -86,28 +116,34 @@ export async function syncEvents(
 
   for (;;) {
     page += 1;
-    const res = await server.getEvents({
-      startLedger: cursor ? undefined : startLedger,
-      cursor,
-      filters: [
-        {
-          type: "contract",
-          contractIds: [config.contractId],
-          topics: topicFilter(EVENT_TOPICS.CREATED),
-        },
-        {
-          type: "contract",
-          contractIds: [config.contractId],
-          topics: topicFilter(EVENT_TOPICS.CANCELLED),
-        },
-        {
-          type: "contract",
-          contractIds: [config.contractId],
-          topics: topicFilter(EVENT_TOPICS.PAID),
-        },
-      ],
-      limit: 100,
-    });
+    const currentCursor = cursor;
+    const res = await withRpcBackoff(
+      "indexer.getEvents",
+      () =>
+        server.getEvents({
+          startLedger: currentCursor ? undefined : startLedger,
+          cursor: currentCursor,
+          filters: [
+            {
+              type: "contract",
+              contractIds: [config.contractId],
+              topics: topicFilter(EVENT_TOPICS.CREATED),
+            },
+            {
+              type: "contract",
+              contractIds: [config.contractId],
+              topics: topicFilter(EVENT_TOPICS.CANCELLED),
+            },
+            {
+              type: "contract",
+              contractIds: [config.contractId],
+              topics: topicFilter(EVENT_TOPICS.PAID),
+            },
+          ],
+          limit: 100,
+        }),
+      retryOpts,
+    );
 
     for (const ev of res.events) {
       highest = Math.max(highest, ev.ledger);
